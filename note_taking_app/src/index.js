@@ -1,4 +1,11 @@
 import express from "express";
+import {
+	body,
+	matchedData,
+	validationResult,
+	checkSchema,
+} from "express-validator";
+import { createuserValidationSchemas } from "../utils/validationSchema.js";
 const app = express();
 const PORT = process.env.PORT || 9040;
 app.listen(PORT, () => {
@@ -56,6 +63,20 @@ let notes = [
 
 //middlewares
 app.use(express.json());
+
+const confirmId = (req, res, next) => {
+	const {
+		params: { id },
+	} = req;
+	console.log(id);
+	const parsedId = parseInt(id);
+	if (isNaN(parsedId)) res.status(401).send("enter a valid id");
+	const findNoteIndex = notes.findIndex((note) => {
+		return note.id === parsedId;
+	});
+	req.findNoteIndex = findNoteIndex;
+	next();
+};
 //Home page
 app.get("/", (req, res) => {
 	res.status(201).send("We have different endpoints make a note today");
@@ -78,10 +99,14 @@ app.get("/api/notes", (req, res) => {
 });
 
 //creating a new note
-app.post("/api/notes", (req, res) => {
-	const { body } = req;
+app.post("/api/notes", checkSchema(createuserValidationSchemas), (req, res) => {
+	const result = validationResult(req);
+
+	if (!result.isEmpty()) return res.status(400).send({ error: result.array() });
+	const data = matchedData(req);
+
 	const id = notes.length + 1;
-	const newNote = { id: id, date: new Date(), ...body };
+	const newNote = { id: id, date: new Date(), ...data };
 	notes.push(newNote);
 	res
 		.status(201)
@@ -89,32 +114,19 @@ app.post("/api/notes", (req, res) => {
 });
 
 //editing a note
-app.put("/api/notes/:id", (req, res) => {
-	const {
-		body,
-		params: { id },
-	} = req;
-	const parsedId = parseInt(id);
-	if (isNaN(parsedId)) res.status(401).send("enter a valid id");
-	const findNoteIndex = notes.findIndex((note) => {
-		return note.id === parsedId;
-	});
-	if (findNoteIndex === -1) res.status(404).send("note not found");
+app.put("/api/notes/:id", confirmId, (req, res) => {
+	const { body, findNoteIndex } = req;
 
-	notes[findNoteIndex] = { id: parsedId, ...body };
+	if (findNoteIndex === -1) res.status(404).send("note not found");
+	console.log(findNoteIndex);
+
+	notes[findNoteIndex] = { id: notes[findNoteIndex].id, ...body };
 	res.status(201).send("note updated succefully");
 });
 
-app.delete("/api/notes/:id", (req, res) => {
-	const {
-		body,
-		params: { id },
-	} = req;
-	const parsedId = parseInt(id);
-	if (isNaN(parsedId)) res.status(401).send("enter a valid id");
-	const findNoteIndex = notes.findIndex((note) => {
-		return note.id === parsedId;
-	});
+app.delete("/api/notes/:id", confirmId, (req, res) => {
+	const { body, findNoteIndex } = req;
+
 	if (findNoteIndex === -1) res.status(404).send("note not found");
 
 	notes.splice(findNoteIndex, 1);
